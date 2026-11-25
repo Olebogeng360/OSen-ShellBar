@@ -6,6 +6,7 @@
 #include "AppBarManager.h"
 #include "WindowTracker.h"
 #include <windowsx.h>
+#include "ShellRenderer.h"
 
 #pragma comment(lib, "dwmapi.lib")
 
@@ -47,6 +48,7 @@ namespace
     ShellSafety gSafety;
     AppBarManager gAppBar;
     WindowTracker gWindowTracker;
+    ShellRenderer gRenderer;
 
     HWND gApp{};
     HWND gTray{};
@@ -66,29 +68,6 @@ namespace
     int gTargetTrayY = 0;
 
    DWORD gLastRevealAt = 0;
-
-    HFONT Font(
-        int size,
-        int weight = FW_NORMAL
-    )
-    {
-        return CreateFontW(
-            -size,
-            0,
-            0,
-            0,
-            weight,
-            FALSE,
-            FALSE,
-            FALSE,
-            DEFAULT_CHARSET,
-            OUT_DEFAULT_PRECIS,
-            CLIP_DEFAULT_PRECIS,
-            CLEARTYPE_QUALITY,
-            DEFAULT_PITCH,
-            L"Segoe UI"
-        );
-    }
 
     void RoundedWindow(
         HWND window,
@@ -128,109 +107,6 @@ namespace
         }
     }
 
-    void PaintSurface(
-        HWND window,
-        HDC deviceContext,
-        int radius
-    )
-
-    {
-        RECT clientRect{};
-        GetClientRect(window, &clientRect);
-
-        HBRUSH fillBrush =
-            CreateSolidBrush(kSurface);
-
-        HPEN borderPen =
-            CreatePen(
-                PS_SOLID,
-                1,
-                kAccent
-            );
-
-        HGDIOBJ oldBrush =
-            SelectObject(
-                deviceContext,
-                fillBrush
-            );
-
-        HGDIOBJ oldPen =
-            SelectObject(
-                deviceContext,
-                borderPen
-            );
-
-        RoundRect(
-            deviceContext,
-            0,
-            0,
-            clientRect.right,
-            clientRect.bottom,
-            radius,
-            radius
-        );
-
-        SelectObject(
-            deviceContext,
-            oldPen
-        );
-
-        SelectObject(
-            deviceContext,
-            oldBrush
-        );
-
-        DeleteObject(borderPen);
-        DeleteObject(fillBrush);
-
-        SetBkMode(
-            deviceContext,
-            TRANSPARENT
-        );
-
-        SetTextColor(
-            deviceContext,
-            kText
-        );
-    }
-
-    void CenterText(
-        HDC deviceContext,
-        RECT bounds,
-        const wchar_t* text,
-        int size
-    )
-
-    {
-        HFONT font =
-            Font(
-                size,
-                FW_SEMIBOLD
-            );
-
-        HGDIOBJ oldFont =
-            SelectObject(
-                deviceContext,
-                font
-            );
-
-        DrawTextW(
-            deviceContext,
-            text,
-            -1,
-            &bounds,
-            DT_CENTER |
-                DT_VCENTER |
-                DT_SINGLELINE
-        );
-
-        SelectObject(
-            deviceContext,
-            oldFont
-        );
-
-        DeleteObject(font);
-    }
 
     bool PointInsideWindow(
     HWND window,
@@ -548,461 +424,6 @@ namespace
         }
     }
 
-    void DrawApp(
-    HWND window,
-    HDC deviceContext
-    )
-    {
-    PaintSurface(
-        window,
-        deviceContext,
-        44
-    );
-
-    // Permanent Start button.
-    RECT startBounds{
-        18,
-        8,
-        74,
-        64
-    };
-
-    CenterText(
-        deviceContext,
-        startBounds,
-        L"⊞",
-        24
-    );
-
-    const auto& applications =
-        gWindowTracker.GetWindows();
-
-    constexpr int buttonWidth = 56;
-    constexpr int buttonHeight = 56;
-    constexpr int buttonGap = 8;
-    constexpr int iconSize = 32;
-    constexpr int firstAppX = 82;
-    constexpr int rightLimit = 682;
-
-    int x = firstAppX;
-
-    for (const auto& application : applications)
-    {
-        if (x + buttonWidth > rightLimit)
-        {
-            break;
-        }
-
-        RECT buttonBounds{
-            x,
-            8,
-            x + buttonWidth,
-            64
-        };
-
-        if (
-            GetForegroundWindow() ==
-            application.hwnd
-        )
-        {
-            HBRUSH activeBrush =
-                CreateSolidBrush(
-                    RGB(48, 48, 48)
-                );
-
-            HPEN activePen =
-                CreatePen(
-                    PS_SOLID,
-                    1,
-                    kAccent
-                );
-
-            HGDIOBJ oldBrush =
-                SelectObject(
-                    deviceContext,
-                    activeBrush
-                );
-
-            HGDIOBJ oldPen =
-                SelectObject(
-                    deviceContext,
-                    activePen
-                );
-
-            RoundRect(
-                deviceContext,
-                buttonBounds.left,
-                buttonBounds.top,
-                buttonBounds.right,
-                buttonBounds.bottom,
-                16,
-                16
-            );
-
-            SelectObject(
-                deviceContext,
-                oldPen
-            );
-
-            SelectObject(
-                deviceContext,
-                oldBrush
-            );
-
-            DeleteObject(activePen);
-            DeleteObject(activeBrush);
-        }
-
-        if (application.icon)
-        {
-            const int iconX =
-                x +
-                (
-                    buttonWidth -
-                    iconSize
-                ) / 2;
-
-            const int iconY =
-                8 +
-                (
-                    buttonHeight -
-                    iconSize
-                ) / 2;
-
-            DrawIconEx(
-                deviceContext,
-                iconX,
-                iconY,
-                application.icon,
-                iconSize,
-                iconSize,
-                0,
-                nullptr,
-                DI_NORMAL
-            );
-        }
-        else
-        {
-            CenterText(
-                deviceContext,
-                buttonBounds,
-                L"□",
-                22
-            );
-        }
-
-        HBRUSH indicatorBrush =
-            CreateSolidBrush(kAccent);
-
-        RECT indicatorBounds{
-            x + 24,
-            59,
-            x + 32,
-            62
-        };
-
-        FillRect(
-            deviceContext,
-            &indicatorBounds,
-            indicatorBrush
-        );
-
-        DeleteObject(indicatorBrush);
-
-        x +=
-            buttonWidth +
-            buttonGap;
-    }
-}
-
-    void DrawTray(
-        HWND window,
-        HDC deviceContext
-    )
-    {
-        PaintSurface(
-            window,
-            deviceContext,
-            40
-        );
-
-        SYSTEMTIME time{};
-        GetLocalTime(&time);
-
-        wchar_t text[96]{};
-
-        swprintf_s(
-            text,
-            L"⌃    Wi-Fi    🔊    "
-            L"%02u:%02u    "
-            L"%02u/%02u/%04u",
-            time.wHour,
-            time.wMinute,
-            time.wDay,
-            time.wMonth,
-            time.wYear
-        );
-
-        RECT clientRect{};
-        GetClientRect(
-            window,
-            &clientRect
-        );
-
-        CenterText(
-            deviceContext,
-            clientRect,
-            text,
-            16
-        );
-    }
-
-    void DrawStart(
-        HWND window,
-        HDC deviceContext
-    )
-    {
-        PaintSurface(
-            window,
-            deviceContext,
-            40
-        );
-
-        RECT titleBounds{
-            28,
-            20,
-            490,
-            58
-        };
-
-        HFONT titleFont =
-            Font(
-                24,
-                FW_BOLD
-            );
-
-        HGDIOBJ oldFont =
-            SelectObject(
-                deviceContext,
-                titleFont
-            );
-
-        DrawTextW(
-            deviceContext,
-            L"CustomShellBar",
-            -1,
-            &titleBounds,
-            DT_LEFT |
-                DT_VCENTER |
-                DT_SINGLELINE
-        );
-
-        SelectObject(
-            deviceContext,
-            oldFont
-        );
-
-        DeleteObject(titleFont);
-
-        RECT searchBounds{
-            28,
-            77,
-            492,
-            123
-        };
-
-        HBRUSH searchBrush =
-            CreateSolidBrush(
-                RGB(38, 38, 38)
-            );
-
-        HPEN searchPen =
-            CreatePen(
-                PS_SOLID,
-                1,
-                RGB(90, 90, 90)
-            );
-
-        HGDIOBJ oldBrush =
-            SelectObject(
-                deviceContext,
-                searchBrush
-            );
-
-        HGDIOBJ oldPen =
-            SelectObject(
-                deviceContext,
-                searchPen
-            );
-
-        RoundRect(
-            deviceContext,
-            searchBounds.left,
-            searchBounds.top,
-            searchBounds.right,
-            searchBounds.bottom,
-            20,
-            20
-        );
-
-        SelectObject(
-            deviceContext,
-            oldPen
-        );
-
-        SelectObject(
-            deviceContext,
-            oldBrush
-        );
-
-        DeleteObject(searchPen);
-        DeleteObject(searchBrush);
-
-        SetTextColor(
-            deviceContext,
-            RGB(200, 200, 200)
-        );
-
-        HFONT searchFont = Font(15);
-
-        oldFont =
-            SelectObject(
-                deviceContext,
-                searchFont
-            );
-
-        RECT searchTextBounds{
-            50,
-            77,
-            480,
-            123
-        };
-
-        DrawTextW(
-            deviceContext,
-            L"Search apps and files",
-            -1,
-            &searchTextBounds,
-            DT_LEFT |
-                DT_VCENTER |
-                DT_SINGLELINE
-        );
-
-        SelectObject(
-            deviceContext,
-            oldFont
-        );
-
-        DeleteObject(searchFont);
-
-        SetTextColor(
-            deviceContext,
-            kText
-        );
-
-        RECT pinnedTitleBounds{
-            28,
-            145,
-            490,
-            180
-        };
-
-        CenterText(
-            deviceContext,
-            pinnedTitleBounds,
-            L"Pinned apps prototype",
-            17
-        );
-
-        const wchar_t* appNames[] =
-        {
-            L"Explorer",
-            L"Edge",
-            L"Settings",
-            L"Terminal",
-            L"Code",
-            L"Music",
-            L"Photos",
-            L"Calculator"
-        };
-
-        int index = 0;
-
-        for (
-            const wchar_t* appName :
-            appNames
-        )
-        {
-            int column = index % 4;
-            int row = index / 4;
-
-            RECT tileBounds{
-                28 + column * 116,
-                195 + row * 105,
-                132 + column * 116,
-                285 + row * 105
-            };
-
-            HBRUSH tileBrush =
-                CreateSolidBrush(
-                    RGB(31, 31, 31)
-                );
-
-            FillRect(
-                deviceContext,
-                &tileBounds,
-                tileBrush
-            );
-
-            DeleteObject(tileBrush);
-
-            CenterText(
-                deviceContext,
-                tileBounds,
-                appName,
-                13
-            );
-
-            ++index;
-        }
-
-        RECT quickBounds{
-            28,
-            420,
-            490,
-            460
-        };
-
-        CenterText(
-            deviceContext,
-            quickBounds,
-            L"Quick controls    "
-            L"Volume 70%    "
-            L"Wi-Fi    "
-            L"Bluetooth",
-            14
-        );
-
-        SetTextColor(
-            deviceContext,
-            RGB(255, 190, 150)
-        );
-
-        RECT exitBounds{
-            28,
-            555,
-            492,
-            608
-        };
-
-        CenterText(
-            deviceContext,
-            exitBounds,
-            L"Exit and restore Windows taskbar",
-            15
-        );
-    }
-
     void ShutDown()
 {
     if (IsWindow(gTray))
@@ -1072,44 +493,46 @@ namespace
         }
 
         case WM_PAINT:
-        {
-            PAINTSTRUCT paintStruct{};
+{
+    PAINTSTRUCT paintStruct{};
 
-            HDC deviceContext =
-                BeginPaint(
-                    window,
-                    &paintStruct
-                );
+    HDC deviceContext =
+        BeginPaint(
+            window,
+            &paintStruct
+        );
 
-            if (window == gApp)
-            {
-                DrawApp(
-                    window,
-                    deviceContext
-                );
-            }
-            else if (window == gTray)
-            {
-                DrawTray(
-                    window,
-                    deviceContext
-                );
-            }
-            else
-            {
-                DrawStart(
-                    window,
-                    deviceContext
-                );
-            }
+    if (window == gApp)
+    {
+        gRenderer.DrawApplicationCapsule(
+            window,
+            deviceContext,
+            gWindowTracker,
+            gStartOpen
+        );
+    }
+    else if (window == gTray)
+    {
+        gRenderer.DrawSystemCapsule(
+            window,
+            deviceContext
+        );
+    }
+    else if (window == gStart)
+    {
+        gRenderer.DrawStartPanel(
+            window,
+            deviceContext
+        );
+    }
 
-            EndPaint(
-                window,
-                &paintStruct
-            );
+    EndPaint(
+        window,
+        &paintStruct
+    );
 
-            return 0;
-        }
+    return 0;
+}
 
         case WM_LBUTTONUP:
 {
