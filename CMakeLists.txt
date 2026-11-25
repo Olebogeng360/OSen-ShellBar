@@ -19,6 +19,7 @@ add_executable(
     src/AppBarManager.cpp
     src/WindowTracker.cpp
     src/ShellRenderer.cpp
+    src/AutoHideController.cpp
 )
 
 target_include_directories(

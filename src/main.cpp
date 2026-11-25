@@ -7,6 +7,7 @@
 #include "WindowTracker.h"
 #include <windowsx.h>
 #include "ShellRenderer.h"
+#include "AutoHideController.h"
 
 #pragma comment(lib, "dwmapi.lib")
 
@@ -20,19 +21,11 @@ namespace
     constexpr UINT_PTR kWindowRefreshTimer = 2;
     constexpr UINT_PTR kAutoHideTimer = 3;
 
-    constexpr DWORD kAutoHideDelayMs = 350;
+    
 
     constexpr int kVisibleReserveHeight = 84;
     constexpr int kHiddenReserveHeight = 3;
-    constexpr int kRevealZoneHeight = 8;
-    constexpr int kHiddenVisiblePixels = 1;
-
-    constexpr UINT_PTR kAnimationTimer = 4;
-
-    constexpr UINT kAnimationIntervalMs = 16;
-    constexpr DWORD kRevealHoldMs = 600;
-
-    constexpr int kAnimationStep = 12;
+    
 
     constexpr int kEmergencyHotkey = 0x4342;
 
@@ -49,25 +42,13 @@ namespace
     AppBarManager gAppBar;
     WindowTracker gWindowTracker;
     ShellRenderer gRenderer;
+    AutoHideController gAutoHide;
 
     HWND gApp{};
     HWND gTray{};
     HWND gStart{};
 
     bool gStartOpen = false;
-
-    bool gBarsVisible = true;
-    DWORD gPointerLeftBarsAt = 0;
-
-    bool gAnimating = false;
-
-    int gCurrentAppY = 0;
-    int gCurrentTrayY = 0;
-
-    int gTargetAppY = 0;
-    int gTargetTrayY = 0;
-
-   DWORD gLastRevealAt = 0;
 
     void RoundedWindow(
         HWND window,
@@ -107,322 +88,6 @@ namespace
         }
     }
 
-
-    bool PointInsideWindow(
-    HWND window,
-    POINT point
-    )
-
-    {
-    if (!IsWindow(window))
-    {
-        return false;
-    }
-
-    RECT windowRect{};
-
-    if (!GetWindowRect(
-        window,
-        &windowRect
-    ))
-    {
-        return false;
-    }
-
-    return PtInRect(
-        &windowRect,
-        point
-    ) != FALSE;
-    }
-
-    void PlaceWindows()
-    {
-    HMONITOR monitor =
-        MonitorFromWindow(
-            gApp,
-            MONITOR_DEFAULTTOPRIMARY
-        );
-
-    MONITORINFO monitorInfo{};
-    monitorInfo.cbSize =
-        sizeof(monitorInfo);
-
-    if (!GetMonitorInfoW(
-        monitor,
-        &monitorInfo
-    ))
-    {
-        return;
-    }
-
-    const RECT& monitorRect =
-        monitorInfo.rcMonitor;
-
-    constexpr int appWidth = 700;
-    constexpr int appHeight = 72;
-
-    constexpr int trayWidth = 330;
-    constexpr int trayHeight = 64;
-
-    constexpr int edgeGap = 18;
-    constexpr int bottomGap = 12;
-
-    constexpr int startWidth = 520;
-    constexpr int startHeight = 630;
-    constexpr int startGap = 8;
-
-    const int appX =
-        monitorRect.left +
-        (
-            monitorRect.right -
-            monitorRect.left -
-            appWidth
-        ) / 2;
-
-    const int trayX =
-        monitorRect.right -
-        trayWidth -
-        edgeGap;
-
-    int appY{};
-    int trayY{};
-
-    if (gBarsVisible)
-    {
-        appY =
-            monitorRect.bottom -
-            appHeight -
-            bottomGap;
-
-        trayY =
-            monitorRect.bottom -
-            trayHeight -
-            bottomGap;
-    }
-    else
-    {
-        // Leave a tiny visible strip so the hidden state
-        // is visually discoverable.
-        appY =
-            monitorRect.bottom -
-            kHiddenVisiblePixels;
-
-        trayY =
-            monitorRect.bottom -
-            kHiddenVisiblePixels;
-    }
-
-    SetWindowPos(
-        gApp,
-        HWND_TOPMOST,
-        appX,
-        appY,
-        appWidth,
-        appHeight,
-        SWP_NOACTIVATE |
-            SWP_SHOWWINDOW
-    );
-
-    SetWindowPos(
-        gTray,
-        HWND_TOPMOST,
-        trayX,
-        trayY,
-        trayWidth,
-        trayHeight,
-        SWP_NOACTIVATE |
-            SWP_SHOWWINDOW
-    );
-
-    RECT appRect{};
-    GetWindowRect(
-        gApp,
-        &appRect
-    );
-
-    UINT startFlags =
-        SWP_NOACTIVATE;
-
-    if (
-        gStartOpen &&
-        gBarsVisible
-    )
-    {
-        startFlags |=
-            SWP_SHOWWINDOW;
-    }
-    else
-    {
-        startFlags |=
-            SWP_HIDEWINDOW;
-    }
-
-    SetWindowPos(
-        gStart,
-        HWND_TOPMOST,
-        appRect.left,
-        appRect.top -
-            startHeight -
-            startGap,
-        startWidth,
-        startHeight,
-        startFlags
-    );
-
-    RoundedWindow(
-        gApp,
-        44
-    );
-
-    RoundedWindow(
-        gTray,
-        40
-    );
-
-    RoundedWindow(
-        gStart,
-        40
-    );
-    }
-
-    void ShowShellBars()
-    {
-        if (gBarsVisible)
-        {
-            return;
-        }
-
-        gBarsVisible = true;
-        gPointerLeftBarsAt = 0;
-
-    PlaceWindows();
-
-    InvalidateRect(
-        gApp,
-        nullptr,
-        FALSE
-    );
-
-    InvalidateRect(
-        gTray,
-        nullptr,
-        FALSE
-    );
-    }
-
-    void HideShellBars()
-    {
-        if (
-            !gBarsVisible ||
-            gStartOpen
-        )
-        {
-            return;
-        }
-
-        gBarsVisible = false;
-        gPointerLeftBarsAt = 0;
-
-        PlaceWindows();
-    }
-
-    void UpdateAutoHide()
-    {
-        POINT pointer{};
-
-        if (!GetCursorPos(&pointer))
-        {
-            return;
-        }
-
-        HMONITOR monitor =
-        MonitorFromWindow(
-            gApp,
-            MONITOR_DEFAULTTOPRIMARY
-        );
-
-        MONITORINFO monitorInfo{};
-        monitorInfo.cbSize =
-        sizeof(monitorInfo);
-
-        if (!GetMonitorInfoW(
-            monitor,
-            &monitorInfo
-        ))
-        {
-            return;
-        }
-
-        const RECT& monitorRect =
-        monitorInfo.rcMonitor;
-
-        const bool pointerInRevealZone =
-            pointer.x >= monitorRect.left &&
-            pointer.x < monitorRect.right &&
-            pointer.y >=
-            monitorRect.bottom -
-            kRevealZoneHeight &&
-            pointer.y < monitorRect.bottom;
-
-        const bool pointerOverApp =
-        PointInsideWindow(
-            gApp,
-            pointer
-        );
-
-        const bool pointerOverTray =
-            PointInsideWindow(
-               gTray,
-               pointer
-           );
-
-        const bool pointerOverStart =
-        gStartOpen &&
-        IsWindowVisible(gStart) &&
-        PointInsideWindow(
-            gStart,
-            pointer
-        );
-
-        if (!gBarsVisible)
-        {
-            if (pointerInRevealZone)
-            {
-                ShowShellBars();
-            }
-
-            return;
-        }
-
-        if (
-            pointerOverApp ||
-            pointerOverTray ||
-            pointerOverStart ||
-            gStartOpen
-        )
-
-        {
-            gPointerLeftBarsAt = 0;
-            return;
-        }
-
-        if (gPointerLeftBarsAt == 0)
-        {
-            gPointerLeftBarsAt =
-            GetTickCount();
-
-            return;
-        }
-
-        const DWORD elapsed =
-        GetTickCount() -
-        gPointerLeftBarsAt;
-
-        if (elapsed >= kAutoHideDelayMs)
-        {
-            HideShellBars();
-        }
-    }
 
     void ShutDown()
 {
@@ -544,7 +209,7 @@ namespace
 
     if (window == gApp)
     {
-        gPointerLeftBarsAt = 0;
+        gAutoHide.NotifyInteraction();
 
         constexpr int startButtonEndX = 82;
         constexpr int buttonWidth = 56;
@@ -556,18 +221,21 @@ namespace
         // Start button.
         if (x < startButtonEndX)
         {
-            gBarsVisible = true;
-
             gStartOpen =
-                !gStartOpen;
+            !gStartOpen;
 
-            gPointerLeftBarsAt = 0;
+            gAutoHide.SetStartPanelOpen(
+                gStartOpen
+            );
 
+            InvalidateRect(
+                gApp,
+                nullptr,
+                FALSE
+           );
 
-            PlaceWindows();
-
-            return 0;
-        }
+           return 0;
+       }
 
         if (x < firstAppX)
         {
@@ -748,7 +416,7 @@ namespace
         wParam == kAutoHideTimer
     )
     {
-        UpdateAutoHide();
+        gAutoHide.Update();
     }
 
     return 0;
@@ -771,8 +439,17 @@ namespace
             return 0;
 
         case WM_DISPLAYCHANGE:
-            PlaceWindows();
-            return 0;
+            gAutoHide.Initialize(
+            gApp,
+            gTray,
+            gStart
+        );
+
+        gAutoHide.SetStartPanelOpen(
+            gStartOpen
+        );
+
+    return 0;
 
         case WM_DPICHANGED:
         {
@@ -797,7 +474,11 @@ namespace
                 );
             }
 
-            PlaceWindows();
+            gAutoHide.Initialize(
+    gApp,
+    gTray,
+    gStart
+);
             return 0;
         }
 
@@ -1014,7 +695,11 @@ if (
     );
 }
 
-    PlaceWindows();
+    gAutoHide.Initialize(
+    gApp,
+    gTray,
+    gStart
+);
 
 ShowWindow(
     gApp,
@@ -1034,7 +719,11 @@ if (gAppBar.Register(gApp))
     );
 
     // The AppBar changed SPI_GETWORKAREA.
-    PlaceWindows();
+    gAutoHide.Initialize(
+    gApp,
+    gTray,
+    gStart
+);
 }
 
 else
