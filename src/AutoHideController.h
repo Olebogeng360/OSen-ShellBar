@@ -19,6 +19,8 @@ public:
 
     void NotifyInteraction();
 
+    void HandleDisplayChange();
+
     [[nodiscard]]
     bool AreBarsVisible() const noexcept;
 
@@ -45,15 +47,39 @@ private:
     static constexpr int StartHeight = 630;
     static constexpr int StartGap = 8;
 
+    // Higher values move faster. 0.20 means 20% of the
+    // remaining distance is covered on every animation frame.
+    static constexpr double AnimationEase = 0.22;
+
+    // Prevents the final few pixels from taking too long.
+    static constexpr int MinimumAnimationStep = 2;
+
     HWND appWindow_{};
     HWND trayWindow_{};
     HWND startWindow_{};
 
     bool barsVisible_ = true;
     bool startPanelOpen_ = false;
+    bool animating_ = false;
+    bool geometryInitialized_ = false;
 
     DWORD pointerLeftAt_ = 0;
     DWORD lastRevealAt_ = 0;
+
+    int appX_ = 0;
+    int trayX_ = 0;
+
+    int currentAppY_ = 0;
+    int currentTrayY_ = 0;
+
+    int targetAppY_ = 0;
+    int targetTrayY_ = 0;
+
+    int visibleAppY_ = 0;
+    int visibleTrayY_ = 0;
+
+    int hiddenAppY_ = 0;
+    int hiddenTrayY_ = 0;
 
     [[nodiscard]]
     bool GetMonitorRect(
@@ -66,7 +92,16 @@ private:
         POINT point
     );
 
-    void PlaceWindows();
-    void ShowBars();
-    void HideBars();
+    static int MoveTowards(
+        int current,
+        int target
+    );
+
+    void RecalculateGeometry();
+    void ApplyCurrentPositions();
+    void UpdateStartPanelPosition();
+
+    void BeginShowAnimation();
+    void BeginHideAnimation();
+    void UpdateAnimation();
 };

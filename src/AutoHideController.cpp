@@ -1,5 +1,8 @@
 #include "AutoHideController.h"
 
+#include <algorithm>
+#include <cstdlib>
+
 void AutoHideController::Initialize(
     HWND appWindow,
     HWND trayWindow,
@@ -12,11 +15,24 @@ void AutoHideController::Initialize(
 
     barsVisible_ = true;
     startPanelOpen_ = false;
+    animating_ = false;
+    geometryInitialized_ = false;
 
     pointerLeftAt_ = 0;
     lastRevealAt_ = GetTickCount();
 
-    PlaceWindows();
+    RecalculateGeometry();
+
+    currentAppY_ = visibleAppY_;
+    currentTrayY_ = visibleTrayY_;
+
+    targetAppY_ = visibleAppY_;
+    targetTrayY_ = visibleTrayY_;
+
+    geometryInitialized_ = true;
+
+    ApplyCurrentPositions();
+    UpdateStartPanelPosition();
 }
 
 void AutoHideController::SetStartPanelOpen(
@@ -24,22 +40,28 @@ void AutoHideController::SetStartPanelOpen(
 )
 {
     startPanelOpen_ = open;
+    pointerLeftAt_ = 0;
 
     if (open)
     {
-        barsVisible_ = true;
         lastRevealAt_ = GetTickCount();
+
+        if (!barsVisible_)
+        {
+            BeginShowAnimation();
+        }
     }
 
-    pointerLeftAt_ = 0;
+    UpdateStartPanelPosition();
 
-    PlaceWindows();
-
-    InvalidateRect(
-        appWindow_,
-        nullptr,
-        FALSE
-    );
+    if (IsWindow(appWindow_))
+    {
+        InvalidateRect(
+            appWindow_,
+            nullptr,
+            FALSE
+        );
+    }
 }
 
 void AutoHideController::NotifyInteraction()
@@ -49,8 +71,47 @@ void AutoHideController::NotifyInteraction()
 
     if (!barsVisible_)
     {
-        ShowBars();
+        BeginShowAnimation();
     }
+}
+
+void AutoHideController::HandleDisplayChange()
+{
+    RecalculateGeometry();
+
+    if (!geometryInitialized_)
+    {
+        currentAppY_ =
+            barsVisible_
+                ? visibleAppY_
+                : hiddenAppY_;
+
+        currentTrayY_ =
+            barsVisible_
+                ? visibleTrayY_
+                : hiddenTrayY_;
+
+        geometryInitialized_ = true;
+    }
+
+    targetAppY_ =
+        barsVisible_
+            ? visibleAppY_
+            : hiddenAppY_;
+
+    targetTrayY_ =
+        barsVisible_
+            ? visibleTrayY_
+            : hiddenTrayY_;
+
+    if (!animating_)
+    {
+        currentAppY_ = targetAppY_;
+        currentTrayY_ = targetTrayY_;
+    }
+
+    ApplyCurrentPositions();
+    UpdateStartPanelPosition();
 }
 
 bool AutoHideController::AreBarsVisible() const noexcept
@@ -125,7 +186,46 @@ bool AutoHideController::PointInsideWindow(
     ) != FALSE;
 }
 
-void AutoHideController::PlaceWindows()
+int AutoHideController::MoveTowards(
+    int current,
+    int target
+)
+{
+    const int distance =
+        target - current;
+
+    if (distance == 0)
+    {
+        return target;
+    }
+
+    int step =
+        static_cast<int>(
+            static_cast<double>(
+                std::abs(distance)
+            ) *
+            AnimationEase
+        );
+
+    step = std::max(
+        step,
+        MinimumAnimationStep
+    );
+
+    if (std::abs(distance) <= step)
+    {
+        return target;
+    }
+
+    return current +
+        (
+            distance > 0
+                ? step
+                : -step
+        );
+}
+
+void AutoHideController::RecalculateGeometry()
 {
     RECT monitorRect{};
 
@@ -134,7 +234,7 @@ void AutoHideController::PlaceWindows()
         return;
     }
 
-    const int appX =
+    appX_ =
         monitorRect.left +
         (
             monitorRect.right -
@@ -142,57 +242,78 @@ void AutoHideController::PlaceWindows()
             AppWidth
         ) / 2;
 
-    const int trayX =
+    trayX_ =
         monitorRect.right -
         TrayWidth -
         EdgeGap;
 
-    const int appY =
-        barsVisible_
-            ? monitorRect.bottom -
-                AppHeight -
-                BottomGap
-            : monitorRect.bottom -
-                HiddenVisiblePixels;
+    visibleAppY_ =
+        monitorRect.bottom -
+        AppHeight -
+        BottomGap;
 
-    const int trayY =
-        barsVisible_
-            ? monitorRect.bottom -
-                TrayHeight -
-                BottomGap
-            : monitorRect.bottom -
-                HiddenVisiblePixels;
+    visibleTrayY_ =
+        monitorRect.bottom -
+        TrayHeight -
+        BottomGap;
 
-    SetWindowPos(
-        appWindow_,
-        HWND_TOPMOST,
-        appX,
-        appY,
-        AppWidth,
-        AppHeight,
-        SWP_NOACTIVATE |
-            SWP_SHOWWINDOW
-    );
+    hiddenAppY_ =
+        monitorRect.bottom -
+        HiddenVisiblePixels;
 
-    SetWindowPos(
-        trayWindow_,
-        HWND_TOPMOST,
-        trayX,
-        trayY,
-        TrayWidth,
-        TrayHeight,
-        SWP_NOACTIVATE |
-            SWP_SHOWWINDOW
-    );
+    hiddenTrayY_ =
+        monitorRect.bottom -
+        HiddenVisiblePixels;
+}
 
-    const bool showStart =
+void AutoHideController::ApplyCurrentPositions()
+{
+    if (IsWindow(appWindow_))
+    {
+        SetWindowPos(
+            appWindow_,
+            HWND_TOPMOST,
+            appX_,
+            currentAppY_,
+            AppWidth,
+            AppHeight,
+            SWP_NOACTIVATE |
+                SWP_SHOWWINDOW
+        );
+    }
+
+    if (IsWindow(trayWindow_))
+    {
+        SetWindowPos(
+            trayWindow_,
+            HWND_TOPMOST,
+            trayX_,
+            currentTrayY_,
+            TrayWidth,
+            TrayHeight,
+            SWP_NOACTIVATE |
+                SWP_SHOWWINDOW
+        );
+    }
+}
+
+void AutoHideController::UpdateStartPanelPosition()
+{
+    if (!IsWindow(startWindow_))
+    {
+        return;
+    }
+
+    const bool readyToShow =
         startPanelOpen_ &&
-        barsVisible_;
+        barsVisible_ &&
+        !animating_ &&
+        currentAppY_ == visibleAppY_;
 
-    UINT startFlags =
+    const UINT flags =
         SWP_NOACTIVATE |
         (
-            showStart
+            readyToShow
                 ? SWP_SHOWWINDOW
                 : SWP_HIDEWINDOW
         );
@@ -200,60 +321,112 @@ void AutoHideController::PlaceWindows()
     SetWindowPos(
         startWindow_,
         HWND_TOPMOST,
-        appX,
-        appY -
+        appX_,
+        currentAppY_ -
             StartHeight -
             StartGap,
         StartWidth,
         StartHeight,
-        startFlags
+        flags
     );
 }
 
-void AutoHideController::ShowBars()
+void AutoHideController::BeginShowAnimation()
 {
-    if (barsVisible_)
-    {
-        return;
-    }
+    RecalculateGeometry();
 
     barsVisible_ = true;
+    animating_ = true;
+
     pointerLeftAt_ = 0;
     lastRevealAt_ = GetTickCount();
 
-    PlaceWindows();
+    targetAppY_ = visibleAppY_;
+    targetTrayY_ = visibleTrayY_;
 
-    InvalidateRect(
-        appWindow_,
-        nullptr,
-        FALSE
-    );
-
-    InvalidateRect(
-        trayWindow_,
-        nullptr,
-        FALSE
-    );
+    UpdateStartPanelPosition();
 }
 
-void AutoHideController::HideBars()
+void AutoHideController::BeginHideAnimation()
 {
-    if (
-        !barsVisible_ ||
-        startPanelOpen_
-    )
+    if (startPanelOpen_)
     {
         return;
     }
 
+    RecalculateGeometry();
+
     barsVisible_ = false;
+    animating_ = true;
+
     pointerLeftAt_ = 0;
 
-    PlaceWindows();
+    targetAppY_ = hiddenAppY_;
+    targetTrayY_ = hiddenTrayY_;
+
+    ShowWindow(
+        startWindow_,
+        SW_HIDE
+    );
+}
+
+void AutoHideController::UpdateAnimation()
+{
+    if (!animating_)
+    {
+        return;
+    }
+
+    currentAppY_ =
+        MoveTowards(
+            currentAppY_,
+            targetAppY_
+        );
+
+    currentTrayY_ =
+        MoveTowards(
+            currentTrayY_,
+            targetTrayY_
+        );
+
+    ApplyCurrentPositions();
+
+    const bool appFinished =
+        currentAppY_ ==
+        targetAppY_;
+
+    const bool trayFinished =
+        currentTrayY_ ==
+        targetTrayY_;
+
+    if (
+        appFinished &&
+        trayFinished
+    )
+    {
+        animating_ = false;
+
+        UpdateStartPanelPosition();
+
+        InvalidateRect(
+            appWindow_,
+            nullptr,
+            FALSE
+        );
+
+        InvalidateRect(
+            trayWindow_,
+            nullptr,
+            FALSE
+        );
+    }
 }
 
 void AutoHideController::Update()
 {
+    // Update animation on every 16 ms timer tick.
+    UpdateAnimation();
+
     POINT pointer{};
 
     if (!GetCursorPos(&pointer))
@@ -295,18 +468,18 @@ void AutoHideController::Update()
             pointer
         );
 
+    const DWORD now =
+        GetTickCount();
+
     if (!barsVisible_)
     {
         if (pointerInRevealZone)
         {
-            ShowBars();
+            BeginShowAnimation();
         }
 
         return;
     }
-
-    const DWORD now =
-        GetTickCount();
 
     const bool revealHoldActive =
         now - lastRevealAt_ <
@@ -325,6 +498,13 @@ void AutoHideController::Update()
         return;
     }
 
+    // Do not start a hide transition while the show transition
+    // is still running.
+    if (animating_)
+    {
+        return;
+    }
+
     if (pointerLeftAt_ == 0)
     {
         pointerLeftAt_ = now;
@@ -336,6 +516,6 @@ void AutoHideController::Update()
         AutoHideDelayMs
     )
     {
-        HideBars();
+        BeginHideAnimation();
     }
 }

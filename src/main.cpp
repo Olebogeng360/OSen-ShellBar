@@ -439,11 +439,9 @@ namespace
             return 0;
 
         case WM_DISPLAYCHANGE:
-            gAutoHide.Initialize(
-            gApp,
-            gTray,
-            gStart
-        );
+            gAutoHide.HandleDisplayChange();
+            return 0;
+        
 
         gAutoHide.SetStartPanelOpen(
             gStartOpen
@@ -474,11 +472,7 @@ namespace
                 );
             }
 
-            gAutoHide.Initialize(
-    gApp,
-    gTray,
-    gStart
-);
+            gAutoHide.HandleDisplayChange();
             return 0;
         }
 
@@ -663,7 +657,7 @@ if (
     SetTimer(
         gApp,
         kAutoHideTimer,
-        50,
+        16,
         nullptr
     ) == 0
 )
