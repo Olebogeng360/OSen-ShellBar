@@ -1,0 +1,38 @@
+# Visual Studio / MSBuild
+.vs/
+[Bb]in/
+[Oo]bj/
+[Dd]ebug*/
+[Rr]elease*/
+x64/
+x86/
+*.user
+*.suo
+*.VC.db
+*.VC.opendb
+*.ipch
+*.pdb
+*.ilk
+*.obj
+*.pch
+*.tlog
+*.log
+
+# CMake
+out/
+build/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+
+# Runtime state
+settings.json
+*.tmp
+Logs/
+crash-dumps/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

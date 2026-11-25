@@ -1,0 +1,64 @@
+name: Bug report
+description: Report reproducible incorrect behavior that did not block recovery
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: "Do not report vulnerabilities here. Use private vulnerability reporting. For a missing or unrecoverable taskbar, use the recovery problem template."
+  - type: input
+    id: version
+    attributes:
+      label: CustomShellBar version or commit
+      placeholder: v0.1.0-alpha or commit SHA
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows edition, version, and OS build
+      placeholder: Windows 10 Pro 22H2, build 19045.x
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Monitor count, resolutions, DPI scales, auto-hide state, and whether a Windhawk bridge was enabled.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      placeholder: "1. Start...
+2. Click...
+3. Observe..."
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Redacted logs or screenshots
+      description: Remove private window titles, paths, credentials, and tokens.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Safety checks
+      options:
+        - label: I can still access Task Manager and the standard Windows recovery paths.
+          required: true
+        - label: I removed private information from logs and screenshots.
+          required: true

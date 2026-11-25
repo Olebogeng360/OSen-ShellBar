@@ -1,0 +1,31 @@
+name: Documentation checks
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify required files
+        shell: bash
+        run: |
+          set -euo pipefail
+          required=(README.md SAFETY.md SECURITY.md CONTRIBUTING.md LICENSE docs/ARCHITECTURE.md docs/DEVELOPMENT.md docs/RECOVERY.md .github/ISSUE_TEMPLATE/bug_report.yml .github/ISSUE_TEMPLATE/recovery_problem.yml)
+          for file in "${required[@]}"; do
+            test -s "$file" || { echo "Missing or empty: $file"; exit 1; }
+          done
+      - name: Check for forbidden tracked runtime files
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git ls-files | grep -E '(^|/)(settings\.json|Logs/|crash-dumps/)'; then
+            echo "Runtime or potentially private files are tracked."
+            exit 1
+          fi

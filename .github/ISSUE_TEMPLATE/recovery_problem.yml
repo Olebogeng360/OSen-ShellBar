@@ -1,0 +1,69 @@
+name: Recovery problem
+description: Report a hidden, missing, or incorrectly restored native Windows taskbar
+title: "[Recovery]: "
+labels: ["recovery", "priority-high", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: "First follow docs/RECOVERY.md. If the computer is currently unusable, restart Windows Explorer from Task Manager or sign out."
+  - type: input
+    id: version
+    attributes:
+      label: CustomShellBar version or commit
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows edition, version, and OS build
+    validations:
+      required: true
+  - type: textarea
+    id: displays
+    attributes:
+      label: Display configuration
+      description: Monitor count, resolutions, DPI scaling, primary monitor, and native taskbar auto-hide setting.
+    validations:
+      required: true
+  - type: dropdown
+    id: termination
+    attributes:
+      label: What happened immediately before the failure?
+      options:
+        - Normal application exit
+        - Emergency shortcut
+        - Main process crash
+        - End task / forced termination
+        - Explorer restart
+        - Display or DPI change
+        - Sign out or shutdown
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: recovery
+    attributes:
+      label: Recovery methods attempted and results
+      description: Include the emergency shortcut, Task Manager, Explorer restart, sign-out, or reboot outcome.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Exact reproduction steps
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Redacted diagnostics
+      description: Do not include credentials, tokens, private window titles, or unrelated personal information.
+  - type: checkboxes
+    id: confirmation
+    attributes:
+      label: Confirmation
+      options:
+        - label: I reviewed docs/RECOVERY.md.
+          required: true
+        - label: I removed sensitive information.
+          required: true
